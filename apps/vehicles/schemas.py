@@ -1,55 +1,33 @@
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
 
-class VehiclesSchema(BaseModel):
-    ubicacion: str;
-    placa: str;
-    numero_motor: str;
-    color_cabina: str;
-    marca: str;
-    linea: str;
-    modelo: str;
-    vencimiento_soat: date;
-    dias_vigentes_soat: int;
-    vencimiento_rtm: date;
-    dias_vigentes_rtm: int;
-    vencimiento_permiso: date;
-    dias_vigentes_permiso: int;
-    vencimiento_extintor: date;
-    dias_vigentes_extintor: int;
+class VehicleBase(BaseModel):
+    plate: str
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[int] = None
 
-class VehiclesCreateSchema(BaseModel):
-    id: int;
-    ubicacion: str;
-    placa: str;
-    numero_motor: str;
-    color_cabina: str;
-    marca: str;
-    linea: str;
-    modelo: str;
-    vencimiento_soat: date;
-    dias_vigentes_soat: int;
-    vencimiento_rtm: date;
-    dias_vigentes_rtm: int;
-    vencimiento_permiso: date;
-    dias_vigentes_permiso: int;
-    vencimiento_extintor: date;
-    dias_vigentes_extintor: int;
+class VehicleCreate(VehicleBase):
+    pass
 
-class VehiclesUpdateSchema(BaseModel):
-    id: int;
-    ubicacion: str;
-    placa: str;
-    numero_motor: str;
-    color_cabina: str;
-    marca: str;
-    linea: str;
-    modelo: str;
-    vencimiento_soat: date;
-    dias_vigentes_soat: int;
-    vencimiento_rtm: date;
-    dias_vigentes_rtm: int;
-    vencimiento_permiso: date;
-    dias_vigentes_permiso: int;
-    vencimiento_extintor: date;
-    dias_vigentes_extintor: int;
+class VehicleUpdate(VehicleBase):
+    plate: Optional[str] = None
+
+class VehicleInDBBase(VehicleBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+class Vehicle(VehicleInDBBase):
+    pass
+
+class VehicleDocumentSchema(BaseModel):
+    document_type: str
+    expiration_date: date
+    file_url: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class MaintenanceSchema(BaseModel):
+    description: str
+    date: date
+    model_config = ConfigDict(from_attributes=True)

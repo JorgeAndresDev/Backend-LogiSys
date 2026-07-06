@@ -1,44 +1,82 @@
-from providers.firebase import user_collection
-from fastapi.encoders import jsonable_encoder
-from firebase_admin import firestore
+from sqlalchemy.orm import Session
+from apps.user.repository import user_repository
+from apps.user.schemas import UserCreate
 
-def authenticate_user_services(username: str, password: str):
+from providers.firebase.auth import firebase_auth
+from core.config import settings
+from datetime import datetime, timedelta, timezone
+from jose import jwt
 
-    user = user_collection.where(u'user', u'==', username).where(u'password', u'==', password).stream()
-    
-    for doc in user:
-        user = doc.to_dict()
-        user['id'] = doc.id
-        break
+def authenticate_via_firebase(db: Session, firebase_token: str):
+    try:
+        # 1. Validar con Firebase
+        decoded_token = firebase_auth.verify_id_token(firebase_token)
+        uid = decoded_token['uid']
+        email = decoded_token.get('email')
 
-    if user is None or 'password' not in user:
-        return False
+        if not email:
+            return None
 
-    hashed_password = user.get('password')
-    if hashed_password is None:
-        return False
-    
-    
-    return user
+        # 2. Verificar whitelist - solo emails permitidos pueden acceder
+        is_allowed = user_repository.is_email_allowed(db, email=email)
+        if not is_allowed:
+            # Si el usuario ya existe en BD (migración), permitir acceso
+            existing_user = user_repository.get_by_email(db, email=email)
+            if not existing_user:
+                return None
 
-def get_user_service(user_id):
+        # 3. Buscar o crear usuario en PostgreSQL
+        user = user_repository.get_by_firebase_uid(db, uid=uid)
+        if user and not user.is_active:
+            return None
+        if not user:
+            # Buscar por email (usuario pre-creado desde whitelist)
+            user = user_repository.get_by_email(db, email=email)
+            if user:
+                if not user.is_active:
+                    return None
+                # Vincular firebase_uid al usuario pre-creado
+                user.firebase_uid = uid
+                user.full_name = decoded_token.get('name', user.full_name)
+                user.is_active = True
+                db.commit()
+                db.refresh(user)
+            else:
+                user_in = UserCreate(
+                    email=email,
+                    firebase_uid=uid,
+                    full_name=decoded_token.get('name', 'Usuario Nuevo'),
+                    is_active=True
+                )
+                user = user_repository.create(db, obj_in=user_in)
+                # Asignar rol 'user' por defecto
+                user_repository.assign_role(db, user_id=user.id, role_name="user")
 
-    user_doc = user_collection.document(user_id).get()
-    
-    if not user_doc.exists:
-        return None  
+        # 4. Actualizar last_login
+        user.last_login = datetime.now(timezone.utc)
+        db.commit()
 
-    user = user_doc.to_dict()
-    user['id'] = user_doc.id
+        # 5. Generar JWT Interno
+        role_names = [r.name for r in user.roles]
+        access_token = create_internal_token({"sub": str(user.id), "uid": uid})
 
-    # Asegúrate de que el resultado sea JSON-serializable
-    user = jsonable_encoder(user)
+        # Construir respuesta con roles incluidos
+        user_data = {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+            "firebase_uid": user.firebase_uid,
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+            "roles": role_names,
+        }
+        return {"access_token": access_token, "token_type": "bearer", "user": user_data}
 
-    return user
+    except Exception as e:
+        return None
 
-def create_user_service(user_data: dict):
-
-    user = user_collection.add(user_data)
-    user_data['id'] = user[1].id
-
-    return user_data
+def create_internal_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)

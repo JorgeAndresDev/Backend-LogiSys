@@ -1,24 +1,28 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from .services import get_all_products, update_product, delete_product, create_product
 from .schemas import ProductSchema, ProductUpdateSchema, ProductCreateSchema
+from providers.firebase.auth import get_firebase_user_id
 
 # Crear un router para los endpoints de productos
 router = APIRouter(prefix="/products", tags=["products"])
 
 # Endpoint para obtener todos los productos
 @router.get("/get_all_products")
-async def get_products():
+async def get_products(
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
     try:
-        # Obtener todos los productos desde el servicio
         products = get_all_products()
         return products
     except Exception as e:
-        # Manejar errores y devolver una respuesta de error 500
         raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint para crear un nuevo producto
 @router.post("/", response_model=ProductSchema)
-async def create_product_endpoint(product_data: ProductCreateSchema):
+async def create_product_endpoint(
+    product_data: ProductCreateSchema,
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
     try:
         # Convertir el objeto Pydantic a un diccionario
         product_dict = product_data.dict()
@@ -35,8 +39,9 @@ async def create_product_endpoint(product_data: ProductCreateSchema):
 # Endpoint para actualizar un producto
 @router.put("/{product_id}", response_model=ProductSchema)
 async def update_product_endpoint(
-    product_id: str,  # ID del producto a actualizar
-    product_data: ProductUpdateSchema  # Datos de actualización
+    product_id: str,
+    product_data: ProductUpdateSchema,
+    current_user_uid: str = Depends(get_firebase_user_id)
 ):
     try:
         # Llamar a la función update_product con await
@@ -54,7 +59,10 @@ async def update_product_endpoint(
 
 # Endpoint para eliminar un producto
 @router.delete("/{product_id}")
-async def delete_product_endpoint(product_id: str):  # ID del producto a eliminar
+async def delete_product_endpoint(
+    product_id: str,
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
     try:
         # Llamar a la función delete_product con await
         deleted = await delete_product(product_id)

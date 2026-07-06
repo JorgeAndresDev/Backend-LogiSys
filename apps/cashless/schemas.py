@@ -1,23 +1,22 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
 
+class CashlessBase(BaseModel):
+    cliente: str
+    dt: int
+    placa: str
+    numero: int
+    novedad: Optional[str] = None
 
-class CashlessSchema(BaseModel):
-    codigo_cliente: int = Field(alias="CODIGO")
-    cliente_nombre: str = Field(alias="CLIENTE") 
-    Documento_pedido: int = Field(alias="DT")
-    placa_vehiculo: str = Field(alias="PLACA")
-    numero_cliente: int = Field(alias="NUMERO") 
-    Novedad: str = Field(alias="NOVEDAD")
+class CashlessCreate(CashlessBase):
+    codigo: int
 
-    class Config:
-        allow_population_by_field_name = True
-        populate_by_name = True  # Para Pydantic v2
+class CashlessUpdate(BaseModel):
+    novedad: str
 
-class UpdateCashlessSchema(BaseModel):
-    codigo_cliente: int = Field(alias="CODIGO")
-    Novedad: str = Field(alias="NOVEDAD")
+class CashlessInDBBase(CashlessBase):
+    codigo: int
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        allow_population_by_field_name = True
-        populate_by_name = True  # Para Pydantic v2
-
+class Cashless(CashlessInDBBase):
+    pass

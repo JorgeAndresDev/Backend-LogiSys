@@ -1,87 +1,60 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
-from apps.employees.schema import EmployeeCreateSchema, UpdateEmployeeSchema
-from conexion.conexionBD import conexiondb
-from apps.employees.services import create_employee_service, delete_empleado_services, download_employees_report_service, get_all_employees_service, update_employee_service, upload_cashless
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from database.deps import get_db
+from apps.employees import services, schemas
+from providers.firebase.auth import get_firebase_user_id
+from typing import List
 
-router = APIRouter(prefix="/employees", tags=["Employees"])
+router = APIRouter(prefix="/employees", tags=["employees"])
 
-@router.get("/get_all_employees")
-async def get_all_employees():
-    try:
-        # Obtener todos los productos desde el servicio
-        employees = get_all_employees_service()
-        return employees
-    except Exception as e:
-        # Manejar errores y devolver una respuesta de error 500
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/upload_file")
-async def upload_file(file: UploadFile = File(...)):
-    try:
-        data = await upload_cashless(file)
-        if "error" in data:
-            return JSONResponse(data, status_code=400)
-        return JSONResponse(data, status_code=200)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/get_all_employees", response_model=List[schemas.Employee])
+async def get_all_employees(
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    return services.get_all_employees_service(db)
 
+@router.get("/get_employee/{cc}", response_model=schemas.Employee)
+async def get_employee(
+    cc: str,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    employee = services.get_employee_by_cc_service(db, cc)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return employee
 
-@router.post('/create_employee')
-async def crear_empleado(employee: EmployeeCreateSchema):
-    try:
-            response = create_employee_service(employee)
-            return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/create_employee", response_model=schemas.Employee)
+async def create_employee(
+    employee_in: schemas.EmployeeCreate, 
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    employee = services.create_employee_service(db, employee_in, current_user_uid)
+    if not employee:
+        raise HTTPException(status_code=400, detail="El empleado ya existe o hay un error en los datos")
+    return employee
 
-@router.delete("/delete_employee/{CC}")
-async def delete_empleado(CC: int):
-    try:
-        response = delete_empleado_services(CC)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+@router.put("/update_employee/{cc}", response_model=schemas.Employee)
+async def update_employee(
+    cc: str,
+    employee_in: schemas.EmployeeUpdate,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    employee = services.update_employee_service(db, cc, employee_in, current_user_uid)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return employee
 
-@router.get('/descargar-informe-empleados')
-async def descargar_informe_empleados():
-    try:
-        output, filename = download_employees_report_service()  # output debe ser BytesIO
-        return StreamingResponse(
-            output,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get('/sql_detalles_empleadoBD')
-async def sql_detalles_empleadoBD(cc: int):
-    try:
-        conexion = conexiondb()
-        if not conexion:
-            raise HTTPException(status_code=500, detail="No se pudo conectar a la base de datos")
-        
-        cursor = conexion.cursor()
-        query = "SELECT * FROM tbl_empleados WHERE cc = %s"
-        cursor.execute(query, (cc,))
-        empleado = cursor.fetchone()
-        cursor.close()
-        conexion.close()
-
-        if not empleado:
-            raise HTTPException(status_code=404, detail="Empleado no encontrado")
-        
-        return {"empleado": empleado}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.put('/update_employee')
-async def update_employee(employee: UpdateEmployeeSchema):
-    try:
-        response = update_employee_service(employee)
-        if not response:
-            raise HTTPException(status_code=404, detail="Empleado no encontrado")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.delete("/delete_employee/{cc}")
+async def delete_employee(
+    cc: str,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    result = services.delete_employee_service(db, cc, current_user_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return result

@@ -3,15 +3,21 @@ from apps.auth.router import auth
 from apps.user.router import router as users_router
 from apps.product.routes import router as products_router
 from apps.employees.router import router as employees_router
-from apps.usersSQL.router import router as usersSQl_router
 from apps.drivers.router import router as conductores_router
 from apps.vehicles.router import router as vehicles_router
+
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from core.limiter import limiter
 from apps.safe.router import router as safe_router
-from apps.cashless.router import router as cashless_router  # Importar el router
+from apps.cashless.router import router as cashless_router
+from apps.audit.router import router as audit_router
 
 # Crear la aplicación FastAPI
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configurar CORS
 origins = [
@@ -32,14 +38,12 @@ app.include_router(auth)
 # Registrar rutas para listar usuarios
 app.include_router(users_router)
 
-# Registrar rutas para listar productos
+# Registrar rutas para productos
 app.include_router(products_router)
 
-# Registrar rutas para listar empleados
+# Registrar rutas para empleados
 app.include_router(employees_router)
 
-# Registrar rutas para listar usuariosSQL
-app.include_router(usersSQl_router)
 
 
 # Registrar rutas para listar usuariosSQL
@@ -53,3 +57,5 @@ app.include_router(safe_router)
 # Registrar rutas para cashless
 app.include_router(cashless_router)
 
+# Registrar rutas para auditoria
+app.include_router(audit_router)

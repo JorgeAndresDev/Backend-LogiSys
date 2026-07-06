@@ -1,40 +1,32 @@
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
 
-class DriverSchema(BaseModel):
-    cedula: int;
-    nombre_apellido: str;
-    cargo: str;
-    vencimiento_licencia: date;
-    dias_restantes_licencia: int;
-    comparendos: str;
-    acuerdo_pago: str;
-    vencimiento_curso: date;
-    dias_restantes_curso: int;
+# Basic Schemas
+class DriverBase(BaseModel):
+    cedula: str
+    name: str
+    phone: Optional[str] = None
 
-    class Config:
-        from_attributes = True  # Para compatibilidad con ORMs
+class DriverCreate(DriverBase):
+    pass
 
-class DriverCreateSchema(BaseModel):
-    id_conductor: int | None = None 
-    cedula: int;
-    nombre_apellido: str;
-    cargo: str;
-    vencimiento_licencia: date;
-    dias_restantes_licencia: int;
-    comparendos: str;
-    acuerdo_pago: str;
-    vencimiento_curso: date;
-    dias_restantes_curso: int;
+class DriverUpdate(DriverBase):
+    cedula: Optional[str] = None
+    name: Optional[str] = None
 
-class DriverUpdateSchema(BaseModel):
-    id_conductor: int;
-    cedula: int;
-    nombre_apellido: str;
-    cargo: str;
-    vencimiento_licencia: date;
-    dias_restantes_licencia: int;
-    comparendos: str;
-    acuerdo_pago: str;
-    vencimiento_curso: date;
-    dias_restantes_curso: int;
+class DriverInDBBase(DriverBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+class Driver(DriverInDBBase):
+    pass
+
+# Nested Data Schemas
+class LicenseSchema(BaseModel):
+    category: str
+    expiration_date: date
+    model_config = ConfigDict(from_attributes=True)
+
+class DriverWithDetails(Driver):
+    licenses: List[LicenseSchema] = []

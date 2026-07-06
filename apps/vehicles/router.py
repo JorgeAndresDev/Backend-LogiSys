@@ -1,54 +1,46 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
-from apps.vehicles.schemas import VehiclesCreateSchema, VehiclesUpdateSchema
-from apps.vehicles.services import create_vehicle_service, delete_vehicle_service, get_all_vehicles_service, update_vehicle_service, upload_cashless
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from database.deps import get_db
+from apps.vehicles import services, schemas
+from providers.firebase.auth import get_firebase_user_id
+from typing import List
 
-router = APIRouter(prefix="/vehicles", tags=["Vehiculos"])
+router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
-@router.get("/get_all_vehicles")
-async def get_all_vehicles():
-    try:
-        # Obtener todos los conductores desde el servicio
-        conductores = get_all_vehicles_service()
-        if conductores is None:
-            return JSONResponse({"error": "No se pudieron obtener los conductores"}, status_code=500)
-        return conductores
-    except Exception as e:
-        # Manejar errores y devolver una respuesta de error 500
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/create_vehicle")
-async def create_vehicle(vehicle: VehiclesCreateSchema):
-    try:
-        response = create_vehicle_service(vehicle)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/update_vehicle")
-async def update_vehicle(vehicle: VehiclesUpdateSchema):
-    try:
-        response = update_vehicle_service(vehicle)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/get_all_vehicles", response_model=List[schemas.Vehicle])
+async def get_all_vehicles(
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    return services.get_all_vehicles_service(db)
 
-@router.post("/upload_file")
-async def upload_file(file: UploadFile = File(...)):
-    try:
-        data = await upload_cashless(file)
-        if "error" in data:
-            return JSONResponse(data, status_code=400)
-        return JSONResponse(data, status_code=200)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/create_vehicle", response_model=schemas.Vehicle)
+async def create_vehicle(
+    vehicle_in: schemas.VehicleCreate, 
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    return services.create_vehicle_service(db, vehicle_in, current_user_uid)
 
-@router.delete("/delete_vehicle/{id}")
-async def delete_vehicle(id: int):
-    try:
-        resultado = await delete_vehicle_service(id)
-        return resultado
-    except HTTPException as he:
-        raise he
-    except Exception as e:  
-        raise HTTPException(status_code=500, detail=str(e))
+@router.put("/update_vehicle/{vehicle_id}", response_model=schemas.Vehicle)
+async def update_vehicle(
+    vehicle_id: int,
+    vehicle_in: schemas.VehicleUpdate,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    vehicle = services.update_vehicle_service(db, vehicle_id, vehicle_in, current_user_uid)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehículo no encontrado")
+    return vehicle
+
+@router.delete("/delete_vehicle/{vehicle_id}")
+async def delete_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    result = services.delete_vehicle_service(db, vehicle_id, current_user_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Vehículo no encontrado")
+    return result

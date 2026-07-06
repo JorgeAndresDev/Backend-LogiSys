@@ -1,46 +1,49 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
-from conexion.conexionBD import conexiondb
-from apps.cashless.schemas import UpdateCashlessSchema
-from apps.cashless.services import delete_cashless_services, get_all_cashless_service, update_cashless_service, upload_cashless_service
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from database.deps import get_db
+from apps.cashless import services, schemas
+from providers.firebase.auth import get_firebase_user_id
+from typing import List
 
+router = APIRouter(prefix="/cashless", tags=["cashless"])
 
-router = APIRouter(prefix="/cashless", tags=["Cashless"])
+@router.get("/get_all", response_model=List[schemas.Cashless])
+async def get_all(
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    return services.get_all_cashless_service(db)
 
-@router.get("/get_all_cashless")
-async def get_all_cashless():
-    try:
-        cashless = get_all_cashless_service()
-        if cashless is None:
-            return JSONResponse({"error": "No se pudieron obtener los datos de cashless"}, status_code=500)
-        return cashless
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/upload_file")
-async def upload_cashless(file: UploadFile = File(...)):
-    try:
-        data = await upload_cashless_service(file)
-        if "error" in data:
-            return JSONResponse(data, status_code=400)
-        return JSONResponse(data, status_code=200)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.put("/update_client")
-async def update_cashless(cashless: UpdateCashlessSchema):
-    try:
-        response = update_cashless_service(cashless)
-        if not response:
-            raise HTTPException(status_code=404, detail="Cliente no encontrado")
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/create", response_model=schemas.Cashless)
+async def create(
+    cashless_in: schemas.CashlessCreate,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    result = services.create_cashless_service(db, cashless_in, current_user_uid)
+    if not result:
+        raise HTTPException(status_code=400, detail="El código Cashless ya existe")
+    return result
 
-@router.delete("/delete_cashless/{codigo_cliente}")
-async def delete_empleado(codigo_cliente: int):
-    try:
-        response = delete_cashless_services(codigo_cliente=codigo_cliente)
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.put("/update/{codigo}", response_model=schemas.Cashless)
+async def update(
+    codigo: int,
+    cashless_in: schemas.CashlessUpdate,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    result = services.update_cashless_service(db, codigo, cashless_in, current_user_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return result
+
+@router.delete("/delete/{codigo}")
+async def delete(
+    codigo: int,
+    db: Session = Depends(get_db),
+    current_user_uid: str = Depends(get_firebase_user_id)
+):
+    result = services.delete_cashless_service(db, codigo, current_user_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return result

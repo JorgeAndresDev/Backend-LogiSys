@@ -8,3 +8,10 @@ keys
 
 .env
 credentials
+
+# Sensitive scripts & legacy files
+scratch/
+gitignore.txt
+*.sql
+*.pyc
+.DS_Store
